@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Scroller - {{ dir_name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0b0b0e;
+      --card-bg: #14141a;
+      --text-color: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-color: #6366f1;
+      --accent-hover: #4f46e5;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --glass-bg: rgba(18, 18, 24, 0.75);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --shadow-color: rgba(0, 0, 0, 0.5);
+
+      --img-max-width: 100%;
+      --img-gap: 40px;
+    }
+
+    body.light-theme {
+      --bg-color: #fafafa;
+      --card-bg: #ffffff;
+      --text-color: #18181b;
+      --text-muted: #71717a;
+      --accent-color: #4f46e5;
+      --accent-hover: #3730a3;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --glass-bg: rgba(250, 250, 250, 0.8);
+      --glass-border: rgba(0, 0, 0, 0.08);
+      --shadow-color: rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-y: scroll;
+      padding-top: 0;
+      padding-bottom: 100px;
+    }
+
+    body.sticky-header-active {
+      padding-top: 85px;
+    }
+
+    body.sticky-header-active header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    body.sticky-header-active .image-card {
+      scroll-margin-top: 100px;
+    }
+
+    /* Scroll progress bar */
+    #progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent-color), #ec4899);
+      width: 0%;
+      z-index: 1001;
+      transition: width 0.1s ease;
+    }
+
+    /* Sticky Header */
+    header {
+      height: 70px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      box-shadow: 0 4px 30px var(--shadow-color);
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 30%;
+    }
+
+    .dir-name {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+    }
+
+    .image-counter {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .image-counter span.total {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    /* Active Filename Display */
+    .active-filename {
+      color: var(--text-color);
+      font-weight: 600;
+      font-size: 0.85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .control-group input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border-color);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+      background: var(--accent-hover);
+    }
+
+    /* Navigation Buttons */
+    .nav-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      color: var(--text-color);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn:hover {
+      background: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-icon {
+      padding: 8px 10px;
+    }
+
+    /* Image Feed */
+    .image-feed {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--img-gap);
+      padding: 1.5rem 5%;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Card Wrapper */
+    .image-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px var(--shadow-color);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: var(--img-max-width);
+      max-width: 100%;
+      scroll-margin-top: 20px;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeIn 0.5s forwards cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .image-card.active {
+      border-color: var(--accent-color);
+      box-shadow: 0 10px 40px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Image Header */
+    .image-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    .image-info-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+      overflow: hidden;
+    }
+
+    .image-index {
+      background: var(--accent-color);
+      color: white;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+    }
+
+    .image-name {
+      font-weight: 600;
+      color: var(--text-color);
+      word-break: break-all;
+    }
+
+    .image-info-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .image-meta {
+      font-size: 0.7rem;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+    }
+
+    /* Image Wrapper */
+    .image-wrapper {
+      position: relative;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 10px;
+      overflow: hidden;
+      min-height: 100px;
+      border: 1px solid var(--border-color);
+      width: 100%;
+    }
+
+    .image-card img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 8px;
+    }
+
+    /* Actions overlay */
+    .image-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 4px;
+    }
+
+    .btn-action {
+      padding: 6px 12px;
+      font-size: 0.75rem;
+    }
+
+    /* Keyboard Shortcuts panel */
+    .help-modal {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 30px var(--shadow-color);
+      z-index: 1002;
+      width: 280px;
+      display: none;
+      animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .help-title {
+      font-weight: 700;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .help-close {
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+
+    .help-close:hover {
+      color: var(--text-color);
+    }
+
+    .shortcut-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.75rem;
+    }
+
+    .shortcut-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .key {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-weight: 700;
+      border: 1px solid var(--glass-border);
+    }
+
+    body.snap-mode {
+      scroll-snap-type: y mandatory;
+    }
+    body.snap-mode .image-card {
+      scroll-snap-align: start;
+    }
+  </style>
+</head>
+<body>
+  <div id="progress-bar"></div>
+
+  <header>
+    <div class="header-left">
+      <div class="dir-name" title="{{ dir_path }}">{{ dir_path }}</div>
+      <div class="image-counter">
+        <span id="current-index">1</span>
+        <span class="total">/ {{ images.len() }}</span>
+      </div>
+    </div>
+
+    <div class="active-filename" id="active-filename">Loading...</div>
+
+    <div class="controls">
+      <div class="control-group">
+        <span>Width</span>
+        <input type="range" id="width-slider" min="30" max="100" value="100">
+      </div>
+      <div class="control-group">
+        <span>Gap</span>
+        <input type="range" id="gap-slider" min="0" max="150" value="40">
+      </div>
+      <div class="control-group">
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="sticky-checkbox">
+          <span>Sticky</span>
+        </label>
+      </div>
+
+      <button class="btn btn-icon" id="snap-toggle" title="Toggle Snap Scrolling (N)">Snap</button>
+      <button class="btn btn-icon" id="theme-btn" title="Toggle Dark/Light Mode (T)">◑</button>
+
+      <div class="nav-buttons">
+        <button class="btn" id="prev-btn" title="Previous (Up/Left)">Prev</button>
+        <button class="btn" id="next-btn" title="Next (Down/Right/Space)">Next</button>
+      </div>
+
+      <button class="btn btn-icon" id="help-btn" title="Keyboard Shortcuts (?)">?</button>
+    </div>
+  </header>
+
+  <main class="image-feed" id="image-feed">
+    {% for img in images %}
+    <div class="image-card" id="card-{{ loop.index0 }}" data-index="{{ loop.index0 }}">
+      <div class="image-header">
+        <div class="image-info-left">
+          <span class="image-index">{{ loop.index }}</span>
+          <span class="image-name">{{ img.relative }}</span>
+        </div>
+        <div class="image-info-right">
+          {% if !img.size_str.is_empty() %}<span class="image-meta">{{ img.size_str }}</span>{% endif %}
+          <span class="image-meta" id="meta-size-{{ loop.index0 }}">Loading...</span>
+        </div>
+      </div>
+      <div class="image-wrapper">
+        <img src="{{ img.relative }}" onload="updateImageInfo(this, {{ loop.index0 }})" loading="lazy" alt="{{ img.relative }}">
+      </div>
+      <div class="image-actions">
+        <button class="btn btn-action" id="copy-rel-btn-{{ loop.index0 }}" data-relative="{{ img.relative }}" onclick="copyRelPath({{ loop.index0 }})" title="Copy relative filename">Copy Name</button>
+        <button class="btn btn-action" id="copy-abs-btn-{{ loop.index0 }}" data-absolute="{{ img.absolute }}" onclick="copyAbsPath({{ loop.index0 }})" title="Copy absolute path">Copy Path</button>
+        <a href="{{ img.relative }}" target="_blank" class="btn btn-action" style="text-decoration: none;">Open Original</a>
+      </div>
+    </div>
+    {% endfor %}
+  </main>
+
+  <div class="help-modal" id="help-modal">
+    <div class="help-title">
+      <span>Shortcuts</span>
+      <span class="help-close" id="help-close">×</span>
+    </div>
+    <div class="shortcut-list">
+      <div class="shortcut-item"><span>Next Image</span><span class="key">Space</span> / <span class="key">↓</span> / <span class="key">J</span></div>
+      <div class="shortcut-item"><span>Prev Image</span><span class="key">↑</span> / <span class="key">K</span></div>
+      <div class="shortcut-item"><span>Scroll slightly</span><span class="key">W</span> (up) / <span class="key">S</span> (down)</div>
+      <div class="shortcut-item"><span>Adjust Width</span><span><span class="key">H</span>/<span class="key">L</span>/<span class="key">A</span>/<span class="key">D</span>/<span class="key">←</span>/<span class="key">→</span></span></div>
+      <div class="shortcut-item"><span>First / Last</span><span class="key">Home</span> / <span class="key">End</span></div>
+      <div class="shortcut-item"><span>Image Fullscreen</span><span class="key">F</span></div>
+      <div class="shortcut-item"><span>Toggle Snap</span><span class="key">N</span></div>
+      <div class="shortcut-item"><span>Toggle Theme</span><span class="key">T</span></div>
+      <div class="shortcut-item"><span>Reset Width</span><span class="key">0</span></div>
+      <div class="shortcut-item"><span>Show Help</span><span class="key">?</span></div>
+    </div>
+  </div>
+
+  <script>
+    const images = {{ images_json|safe }};
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const widthSlider = document.getElementById('width-slider');
+      const gapSlider = document.getElementById('gap-slider');
+      const stickyCheckbox = document.getElementById('sticky-checkbox');
+      const snapToggle = document.getElementById('snap-toggle');
+      const prevBtn = document.getElementById('prev-btn');
+      const nextBtn = document.getElementById('next-btn');
+      const helpBtn = document.getElementById('help-btn');
+      const helpModal = document.getElementById('help-modal');
+      const helpClose = document.getElementById('help-close');
+      const themeBtn = document.getElementById('theme-btn');
+      const progressBar = document.getElementById('progress-bar');
+      const currentIndexDisplay = document.getElementById('current-index');
+      const activeFilenameDisplay = document.getElementById('active-filename');
+
+      let activeIndex = 0;
+      let isSnapMode = false;
+
+      // Initialize from local storage or defaults
+      const savedWidth = localStorage.getItem('scroller-width') || '100';
+      const savedGap = localStorage.getItem('scroller-gap') || '40';
+      const savedSnap = localStorage.getItem('scroller-snap') === 'true';
+      const savedTheme = localStorage.getItem('scroller-theme') || 'dark';
+      const savedSticky = localStorage.getItem('scroller-sticky') === 'true';
+
+      widthSlider.value = savedWidth;
+      document.documentElement.style.setProperty('--img-max-width', savedWidth + '%');
+
+      gapSlider.value = savedGap;
+      document.documentElement.style.setProperty('--img-gap', savedGap + 'px');
+
+      if (savedSnap) {
+        enableSnapMode();
+      }
+
+      if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+      }
+
+      if (savedSticky) {
+        stickyCheckbox.checked = true;
+        document.body.classList.add('sticky-header-active');
+      } else {
+        stickyCheckbox.checked = false;
+        document.body.classList.remove('sticky-header-active');
+      }
+
+      // Handle Width
+      widthSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        document.documentElement.style.setProperty('--img-max-width', val + '%');
+        localStorage.setItem('scroller-width', val);
+      });
+
+      // Handle Gap
+      gapSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        document.documentElement.style.setProperty('--img-gap', val + 'px');
+        localStorage.setItem('scroller-gap', val);
+      });
+
+      // Handle Sticky Header checkbox
+      stickyCheckbox.addEventListener('change', () => {
+        if (stickyCheckbox.checked) {
+          document.body.classList.add('sticky-header-active');
+          localStorage.setItem('scroller-sticky', 'true');
+        } else {
+          document.body.classList.remove('sticky-header-active');
+          localStorage.setItem('scroller-sticky', 'false');
+        }
+      });
+
+      // Theme
+      themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('light-theme');
+        const isLight = document.body.classList.contains('light-theme');
+        localStorage.setItem('scroller-theme', isLight ? 'light' : 'dark');
+      });
+
+      // Snap
+      function enableSnapMode() {
+        document.body.classList.add('snap-mode');
+        snapToggle.style.backgroundColor = 'var(--accent-color)';
+        snapToggle.style.color = 'white';
+        isSnapMode = true;
+        localStorage.setItem('scroller-snap', 'true');
+      }
+
+      function disableSnapMode() {
+        document.body.classList.remove('snap-mode');
+        snapToggle.style.backgroundColor = '';
+        snapToggle.style.color = '';
+        isSnapMode = false;
+        localStorage.setItem('scroller-snap', 'false');
+      }
+
+      snapToggle.addEventListener('click', () => {
+        if (isSnapMode) disableSnapMode();
+        else enableSnapMode();
+      });
+
+      // Help Modal
+      helpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        helpModal.style.display = helpModal.style.display === 'block' ? 'none' : 'block';
+      });
+      helpClose.addEventListener('click', () => {
+        helpModal.style.display = 'none';
+      });
+      document.addEventListener('click', (e) => {
+        if (helpModal.style.display === 'block' && !helpModal.contains(e.target) && e.target !== helpBtn) {
+          helpModal.style.display = 'none';
+        }
+      });
+
+      // Navigation
+      const cards = document.querySelectorAll('.image-card');
+
+      function scrollToImage(index) {
+        if (index >= 0 && index < cards.length) {
+          cards[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+          activeIndex = index;
+          updateActiveState(index);
+        }
+      }
+
+      prevBtn.addEventListener('click', () => {
+        scrollToImage(activeIndex - 1);
+      });
+
+      nextBtn.addEventListener('click', () => {
+        scrollToImage(activeIndex + 1);
+      });
+
+      // Intersection Observer
+      const observerOptions = {
+        root: null,
+        rootMargin: '-30% 0px -40% 0px',
+        threshold: 0
+      };
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const index = parseInt(entry.target.getAttribute('data-index'));
+            activeIndex = index;
+            updateActiveState(index);
+          }
+        });
+      }, observerOptions);
+
+      cards.forEach(card => observer.observe(card));
+
+      function updateActiveState(index) {
+        cards.forEach((card, idx) => {
+          if (idx === index) {
+            card.classList.add('active');
+          } else {
+            card.classList.remove('active');
+          }
+        });
+        currentIndexDisplay.textContent = index + 1;
+        const filename = images[index];
+        activeFilenameDisplay.textContent = filename;
+      }
+
+      // Scroll Progress
+      window.addEventListener('scroll', () => {
+        const winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const scrolled = height > 0 ? (winScroll / height) * 100 : 0;
+        progressBar.style.width = scrolled + '%';
+      });
+
+      // Keyboard
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
+          e.preventDefault();
+          scrollToImage(activeIndex + 1);
+        } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
+          e.preventDefault();
+          scrollToImage(activeIndex - 1);
+        } else if (e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          scrollToImage(activeIndex + 1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'H' || e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          let nextVal = Math.max(30, parseInt(widthSlider.value) - 2);
+          widthSlider.value = nextVal;
+          widthSlider.dispatchEvent(new Event('input'));
+        } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L' || e.key === 'd' || e.key === 'D') {
+          e.preventDefault();
+          let nextVal = Math.min(100, parseInt(widthSlider.value) + 2);
+          widthSlider.value = nextVal;
+          widthSlider.dispatchEvent(new Event('input'));
+        } else if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          window.scrollBy(0, -60);
+        } else if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          window.scrollBy(0, 60);
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          scrollToImage(0);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          scrollToImage(cards.length - 1);
+        } else if (e.key === 'n' || e.key === 'N') {
+          snapToggle.click();
+        } else if (e.key === 't' || e.key === 'T') {
+          themeBtn.click();
+        } else if (e.key === '?' || e.key === '/') {
+          helpBtn.click();
+        } else if (e.key === 'Escape') {
+          helpModal.style.display = 'none';
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          }
+        } else if (e.key === '0') {
+          widthSlider.value = 100;
+          widthSlider.dispatchEvent(new Event('input'));
+        } else if (e.key === 'f' || e.key === 'F') {
+          const activeCard = cards[activeIndex];
+          if (activeCard) {
+            const img = activeCard.querySelector('img');
+            if (!document.fullscreenElement) {
+              img.requestFullscreen().catch(err => {
+                console.error(`Error fullscreen: ${err.message}`);
+              });
+            } else {
+              document.exitFullscreen();
+            }
+          }
+        }
+      });
+
+      window.updateImageInfo = function(img, index) {
+        const sizeSpan = document.getElementById(`meta-size-${index}`);
+        if (sizeSpan && img.naturalWidth && img.naturalHeight) {
+          const w = img.naturalWidth;
+          const h = img.naturalHeight;
+          const aspect = (w / h).toFixed(2);
+          sizeSpan.textContent = `${w} × ${h} (${aspect})`;
+        }
+      };
+
+      window.copyText = function(text, btnId) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => showFeedback(btnId));
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          try {
+            document.execCommand('copy');
+            showFeedback(btnId);
+          } catch (err) {
+            console.error('Fallback copy failed', err);
+          }
+          document.body.removeChild(textarea);
+        }
+      };
+
+      function showFeedback(btnId) {
+        const btn = document.getElementById(btnId);
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Copied!';
+        btn.style.backgroundColor = '#10b981';
+        btn.style.borderColor = '#10b981';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.style.backgroundColor = '';
+          btn.style.borderColor = '';
+        }, 1200);
+      }
+
+      window.copyRelPath = function(idx) {
+        const btn = document.getElementById(`copy-rel-btn-${idx}`);
+        const text = btn.getAttribute('data-relative');
+        copyText(text, `copy-rel-btn-${idx}`);
+      };
+
+      window.copyAbsPath = function(idx) {
+        const btn = document.getElementById(`copy-abs-btn-${idx}`);
+        const text = btn.getAttribute('data-absolute');
+        copyText(text, `copy-abs-btn-${idx}`);
+      };
+    });
+  </script>
+</body>
+</html>
