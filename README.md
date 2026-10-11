@@ -20,20 +20,14 @@ The viewer supports adjustable image width/gap, dark/light theme, scroll
 snapping, a sticky header, keyboard navigation, and per-image copy/open
 actions — all client-side, no server involved.
 
-## Build
+## Development
+
+Requires [just](https://github.com/casey/just).
 
 ```
-cargo build --release
-```
-
-## Install
-
-```
-ln -sf "$(pwd)/target/release/scroller" ~/.local/bin/scroller
-```
-
-## Install
-
-```
-cargo install -path .
+just run      # cargo run (accepts extra args)
+just build    # release build
+just test     # cargo test
+just check    # fmt + clippy
+just install  # cargo install --path .
 ```
