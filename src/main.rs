@@ -1,6 +1,8 @@
 use askama::Template;
 use std::env;
+use std::error::Error;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -23,37 +25,6 @@ struct ScrollerTemplate {
     dir_path: String,
     images: Vec<ImageEntry>,
     images_json: String,
-}
-
-fn natural_sort_key(name: &str) -> Vec<(bool, String, u64)> {
-    let mut key = Vec::new();
-    let mut chars = name.chars().peekable();
-    while chars.peek().is_some() {
-        if chars.peek().unwrap().is_ascii_digit() {
-            let mut num = String::new();
-            while let Some(c) = chars.peek() {
-                if c.is_ascii_digit() {
-                    num.push(*c);
-                    chars.next();
-                } else {
-                    break;
-                }
-            }
-            key.push((false, String::new(), num.parse().unwrap_or(0)));
-        } else {
-            let mut text = String::new();
-            while let Some(c) = chars.peek() {
-                if !c.is_ascii_digit() {
-                    text.push(*c);
-                    chars.next();
-                } else {
-                    break;
-                }
-            }
-            key.push((true, text.to_lowercase(), 0));
-        }
-    }
-    key
 }
 
 fn format_size(bytes: u64) -> String {
@@ -93,111 +64,86 @@ fn open_in_browser(path: &Path) {
     }
 }
 
-fn main() {
-    let mut args = env::args();
-    args.next(); // skip argv[0]
-    let rest: Vec<String> = args.collect();
+fn is_image(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| {
+            IMAGE_EXTENSIONS
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(ext))
+        })
+}
 
-    if rest.first().map(String::as_str) == Some("--cleanup-after") {
-        let Some(target) = rest.get(1) else {
-            std::process::exit(1);
-        };
-        thread::sleep(Duration::from_secs(45));
-        let _ = fs::remove_file(target);
-        return;
-    }
-
-    let cwd = resolve_cwd();
-
-    let mut image_files: Vec<PathBuf> = match fs::read_dir(&cwd) {
-        Ok(entries) => entries
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.is_file())
-            .filter(|p| {
-                p.extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| IMAGE_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
-                    .unwrap_or(false)
-            })
-            .collect(),
-        Err(e) => {
-            eprintln!("Error scanning directory: {e}");
-            std::process::exit(1);
+fn collect_images(cwd: &Path) -> io::Result<Vec<ImageEntry>> {
+    let mut images = Vec::new();
+    for entry in fs::read_dir(cwd)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !is_image(&path) {
+            continue;
         }
-    };
-
-    if image_files.is_empty() {
-        eprintln!("No images found in the current directory.");
-        std::process::exit(1);
-    }
-
-    image_files.sort_by(|a, b| {
-        let a_name = a.file_name().unwrap().to_string_lossy();
-        let b_name = b.file_name().unwrap().to_string_lossy();
-        natural_sort_key(&a_name).cmp(&natural_sort_key(&b_name))
-    });
-
-    let mut images = Vec::with_capacity(image_files.len());
-    let mut relative_names = Vec::with_capacity(image_files.len());
-
-    for img in &image_files {
-        let relative = img.file_name().unwrap().to_string_lossy().to_string();
-        let absolute = fs::canonicalize(img)
-            .unwrap_or_else(|_| img.clone())
-            .to_string_lossy()
-            .to_string();
-        let size_str = fs::metadata(img)
-            .map(|m| format_size(m.len()))
-            .unwrap_or_default();
-
-        relative_names.push(relative.clone());
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
         images.push(ImageEntry {
-            relative,
-            absolute,
-            size_str,
+            relative: entry.file_name().to_string_lossy().into_owned(),
+            absolute: path.to_string_lossy().into_owned(),
+            size_str: format_size(meta.len()),
         });
     }
+    images.sort_unstable_by(|a, b| natord::compare_ignore_case(&a.relative, &b.relative));
+    Ok(images)
+}
 
-    let dir_name = cwd
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| cwd.to_string_lossy().to_string());
-    let dir_path = cwd.to_string_lossy().to_string();
-    let images_json = serde_json::to_string(&relative_names).unwrap();
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut args = env::args().skip(1);
+
+    if args.next().as_deref() == Some("--cleanup-after") {
+        let target = args.next().ok_or("--cleanup-after requires a path")?;
+        thread::sleep(Duration::from_secs(45));
+        let _ = fs::remove_file(target);
+        return Ok(());
+    }
+
+    // Canonicalized once; image paths are joined from it.
+    let cwd = resolve_cwd().canonicalize()?;
+
+    let images = collect_images(&cwd).map_err(|e| format!("Error scanning directory: {e}"))?;
+    if images.is_empty() {
+        return Err("No images found in the current directory.".into());
+    }
+
+    let relative_names: Vec<&str> = images.iter().map(|i| i.relative.as_str()).collect();
+    let images_json = serde_json::to_string(&relative_names)?;
 
     let template = ScrollerTemplate {
-        dir_name,
-        dir_path,
+        dir_name: cwd
+            .file_name()
+            .unwrap_or(cwd.as_os_str())
+            .to_string_lossy()
+            .into_owned(),
+        dir_path: cwd.to_string_lossy().into_owned(),
         images,
         images_json,
     };
 
-    let html = match template.render() {
-        Ok(html) => html,
-        Err(e) => {
-            eprintln!("Error rendering viewer template: {e}");
-            std::process::exit(1);
-        }
-    };
+    let html = template
+        .render()
+        .map_err(|e| format!("Error rendering viewer template: {e}"))?;
 
     let viewer_path = cwd.join(".scroller_view.html");
-    if let Err(e) = fs::write(&viewer_path, html) {
-        eprintln!("Error creating viewer file: {e}");
-        std::process::exit(1);
-    }
+    fs::write(&viewer_path, html).map_err(|e| format!("Error creating viewer file: {e}"))?;
 
     open_in_browser(&viewer_path);
 
-    // The viewer file needs to survive long enough for the browser to load
-    // it (and tolerate a manual reload) before it's cleaned up so it doesn't
-    // litter the directory. That wait can't happen in this process without
-    // blocking the shell prompt for 45s, so it's handed off to a detached
-    // copy of this same binary running in --cleanup-after mode.
+    // Delete the viewer file after 45s via a detached copy of this binary,
+    // so the shell prompt is not blocked.
     if let Ok(exe) = env::current_exe() {
         let _ = Command::new(exe)
             .arg("--cleanup-after")
             .arg(&viewer_path)
             .spawn();
     }
+    Ok(())
 }
