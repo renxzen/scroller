@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
@@ -50,16 +50,23 @@ fn resolve_cwd() -> PathBuf {
 }
 
 fn open_in_browser(path: &Path) {
-    let result = if cfg!(target_os = "macos") {
-        Command::new("open").arg(path).spawn()
+    let opener = if cfg!(target_os = "macos") {
+        "open"
     } else if cfg!(target_os = "linux") {
-        Command::new("xdg-open").arg(path).spawn()
+        "xdg-open"
     } else {
         eprintln!("Unsupported platform for opening a browser.");
         return;
     };
 
-    if let Err(e) = result {
+    // Detach stdio: a browser launched here would otherwise keep writing to this terminal.
+    if let Err(e) = Command::new(opener)
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
         eprintln!("Error opening browser: {e}");
     }
 }
@@ -143,6 +150,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _ = Command::new(exe)
             .arg("--cleanup-after")
             .arg(&viewer_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn();
     }
     Ok(())
