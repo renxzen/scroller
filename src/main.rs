@@ -25,6 +25,8 @@ struct ScrollerTemplate {
     dir_path: String,
     images: Vec<ImageEntry>,
     images_json: String,
+    css: &'static str,
+    js: &'static str,
 }
 
 fn format_size(bytes: u64) -> String {
@@ -133,6 +135,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         dir_path: cwd.to_string_lossy().into_owned(),
         images,
         images_json,
+        css: include_str!("../web/scroller.css"),
+        js: include_str!("../web/scroller.js"),
     };
 
     let html = template
